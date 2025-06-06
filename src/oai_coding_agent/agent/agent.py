@@ -19,6 +19,8 @@ from agents import (
 )
 from openai.types.shared.reasoning import Reasoning
 
+from ..mcp.mcp_servers import start_mcp_servers
+from ..mcp.mcp_tool_selector import get_filtered_function_tools
 from ..runtime_config import RuntimeConfig
 from .events import (
     MessageOutputEvent,
@@ -27,8 +29,6 @@ from .events import (
     map_sdk_event_to_agent_event,
 )
 from .instruction_builder import build_instructions
-from .mcp_servers import start_mcp_servers
-from .mcp_tool_selector import get_filtered_function_tools
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +59,19 @@ class Agent:
         self._previous_response_id: Optional[str] = None
         self._exit_stack: Optional[AsyncExitStack] = None
         self._sdk_agent: Optional[SDKAgent] = None
+        self._dynamic_context: Optional[Any] = None
 
     async def __aenter__(self) -> "Agent":
         # Initialize exit stack for async contexts and callbacks
         self._exit_stack = AsyncExitStack()
         await self._exit_stack.__aenter__()
+
+        from oai_coding_agent.mcp.dynamic_context import (  # noqa: PLC0415
+            DynamicContextManager,
+        )
+
+        # Initialize dynamic context manager
+        self._dynamic_context = DynamicContextManager(self.config.repo_path)
 
         # Start MCP servers (filesystem, CLI, Git, GitHub) and register cleanup
         mcp_servers = await start_mcp_servers(
@@ -80,7 +88,7 @@ class Agent:
         self._exit_stack.callback(trace_ctx.__exit__, None, None, None)
 
         # Build instructions and fetch filtered MCP function-tools
-        dynamic_instructions = build_instructions(self.config)
+        dynamic_instructions = build_instructions(self.config, include_context=True)
         function_tools = await get_filtered_function_tools(
             mcp_servers, self.config.mode.value
         )
@@ -119,16 +127,18 @@ class Agent:
             max_turns=self.max_turns,
         )
 
-        # Automatically resume from the last_response_id set on previous runs
-        async def _map_events() -> AsyncIterator[
-            ToolCallEvent | ReasoningEvent | MessageOutputEvent
-        ]:
+        async def _map_events(
+            self: "Agent",
+        ) -> AsyncIterator[ToolCallEvent | ReasoningEvent | MessageOutputEvent]:
             """Map SDK events to agent events, filtering out None values."""
             async for sdk_event in result.stream_events():
                 agent_event = map_sdk_event_to_agent_event(sdk_event)
                 if agent_event is not None:
+                    # Track file operations in dynamic context
+                    if self._dynamic_context is not None:
+                        self._dynamic_context.track_tool_call(agent_event)
                     yield agent_event
 
         # Store the last-response ID so subsequent calls continue the dialogue
         self._previous_response_id = result.last_response_id
-        return _map_events()
+        return _map_events(self)

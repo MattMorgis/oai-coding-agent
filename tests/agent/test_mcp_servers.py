@@ -7,7 +7,7 @@ from typing import Any, Callable, cast
 import pytest
 from agents.mcp import MCPServerStdioParams
 
-import oai_coding_agent.agent.mcp_servers as mcp_servers
+import oai_coding_agent.mcp.mcp_servers as mcp_servers
 
 
 class DummyExitStack:
@@ -98,13 +98,14 @@ async def test_start_mcp_servers_all_success(monkeypatch: pytest.MonkeyPatch) ->
     # Should start filesystem, CLI, git, and GitHub servers
     names = [s.name for s in servers]
     assert names == [
+        "project-context-mcp",
         "file-system-mcp",
         "cli-mcp-server",
         "mcp-server-git",
         "github-mcp-server",
     ]
     # exit_stack should have a callback for each server
-    assert len(exit_stack.callbacks) == 4
+    assert len(exit_stack.callbacks) == 5
 
 
 @pytest.mark.asyncio
@@ -145,8 +146,13 @@ async def test_start_mcp_servers_skip_cli_on_error(
     )
     names = [s.name for s in servers]
     # Should skip CLI and include filesystem, git, and GitHub servers
-    assert names == ["file-system-mcp", "mcp-server-git", "github-mcp-server"]
-    assert len(exit_stack.callbacks) == 3
+    assert names == [
+        "project-context-mcp",
+        "file-system-mcp",
+        "mcp-server-git",
+        "github-mcp-server",
+    ]
+    assert len(exit_stack.callbacks) == 4
 
 
 @pytest.mark.asyncio
@@ -187,8 +193,13 @@ async def test_start_mcp_servers_skip_git_on_error(
     )
     names = [s.name for s in servers]
     # Should skip Git and include filesystem, CLI, and GitHub servers
-    assert names == ["file-system-mcp", "cli-mcp-server", "github-mcp-server"]
-    assert len(exit_stack.callbacks) == 3
+    assert names == [
+        "project-context-mcp",
+        "file-system-mcp",
+        "cli-mcp-server",
+        "github-mcp-server",
+    ]
+    assert len(exit_stack.callbacks) == 4
 
 
 @pytest.mark.asyncio
@@ -229,8 +240,8 @@ async def test_start_mcp_servers_skip_cli_and_git_on_error(
     )
     names = [s.name for s in servers]
     # Should skip CLI and Git and include filesystem and GitHub servers only
-    assert names == ["file-system-mcp", "github-mcp-server"]
-    assert len(exit_stack.callbacks) == 2
+    assert names == ["project-context-mcp", "file-system-mcp", "github-mcp-server"]
+    assert len(exit_stack.callbacks) == 3
 
 
 @pytest.mark.asyncio
@@ -270,6 +281,7 @@ async def test_start_mcp_servers_plan_mode_includes_atlassian(
     # Should start Atlassian, filesystem, CLI, git, and GitHub servers
     names = [s.name for s in servers]
     assert names == [
+        "project-context-mcp",
         "atlassian-mcp",
         "file-system-mcp",
         "cli-mcp-server",
@@ -277,7 +289,7 @@ async def test_start_mcp_servers_plan_mode_includes_atlassian(
         "github-mcp-server",
     ]
     # exit_stack should have a callback for each server
-    assert len(exit_stack.callbacks) == 5
+    assert len(exit_stack.callbacks) == 6
 
 
 @pytest.mark.asyncio
@@ -319,9 +331,10 @@ async def test_start_mcp_servers_plan_mode_skip_atlassian_on_error(
     names = [s.name for s in servers]
     # Should skip Atlassian and include filesystem, CLI, git, and GitHub servers
     assert names == [
+        "project-context-mcp",
         "file-system-mcp",
         "cli-mcp-server",
         "mcp-server-git",
         "github-mcp-server",
     ]
-    assert len(exit_stack.callbacks) == 4
+    assert len(exit_stack.callbacks) == 5

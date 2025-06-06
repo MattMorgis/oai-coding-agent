@@ -14,14 +14,14 @@ from agents.items import (  # type: ignore[attr-defined]
 )
 from agents.mcp import MCPServerStdioParams
 
-import oai_coding_agent.agent.mcp_servers as mcp_servers_module
+import oai_coding_agent.mcp.mcp_servers as mcp_servers_module
 from oai_coding_agent.agent.agent import Agent
 from oai_coding_agent.agent.events import (
     MessageOutputEvent,
     ReasoningEvent,
     ToolCallEvent,
 )
-from oai_coding_agent.agent.mcp_servers import (
+from oai_coding_agent.mcp.mcp_servers import (
     ALLOWED_CLI_COMMANDS,
     ALLOWED_CLI_FLAGS,
     QuietMCPServerStdio,

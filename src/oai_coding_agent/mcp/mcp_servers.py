@@ -8,7 +8,8 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any, List, Optional
 
-from agents.mcp import MCPServer, MCPServerStdio
+from agents.mcp import MCPServer, MCPServerSse, MCPServerStdio
+from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,16 @@ class QuietMCPServerStdio(MCPServerStdio):
         return stdio_client(self.params, errlog=open(os.devnull, "w"))
 
 
+class QuietMCPServerSse(MCPServerSse):
+    """Variant of MCPServerSse that silences child-process stderr."""
+
+    def create_streams(self) -> Any:
+        # Ensure we have a URL parameter
+        if "url" not in self.params:
+            raise ValueError("Missing required 'url' parameter for SSE client")
+        return sse_client(self.params["url"])
+
+
 async def start_mcp_servers(
     repo_path: Path,
     github_token: Optional[str],
@@ -65,6 +76,25 @@ async def start_mcp_servers(
     Returns a list of connected MCPServerStdio instances.
     """
     servers: List[MCPServer] = []
+
+    # Project Context MCP server
+    try:
+        project_ctx_server = QuietMCPServerStdio(
+            name="project-context-mcp",
+            params={
+                "command": "python",
+                "args": [str(Path(__file__).parent / "project_context_mcp_server.py")],
+                "cwd": str(repo_path),
+            },
+            client_session_timeout_seconds=30,
+            cache_tools_list=True,
+        )
+        project_ctx = await exit_stack.enter_async_context(project_ctx_server)
+
+        servers.append(project_ctx)
+        logger.info("Project Context MCP server started successfully")
+    except OSError:
+        logger.exception("Failed to start Project Context MCP server")
 
     # Atlassian Official MCP server (only in plan mode)
     if mode == "plan":

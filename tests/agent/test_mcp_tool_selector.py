@@ -5,7 +5,7 @@ import pytest
 from agents.mcp import MCPServer
 from agents.mcp.util import MCPUtil
 
-from oai_coding_agent.agent.mcp_tool_selector import get_filtered_function_tools
+from oai_coding_agent.mcp.mcp_tool_selector import get_filtered_function_tools
 
 
 class DummyTool:
