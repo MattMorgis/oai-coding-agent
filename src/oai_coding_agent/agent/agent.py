@@ -4,6 +4,7 @@ Agent for streaming OAI agent interactions with a local codebase.
 
 __all__ = ["Agent", "AgentProtocol"]
 
+import asyncio
 import logging
 from contextlib import AsyncExitStack
 from typing import Any, AsyncIterator, Optional, Protocol, runtime_checkable
@@ -19,6 +20,7 @@ from agents import (
 )
 from openai.types.shared.reasoning import Reasoning
 
+from ..interrupt_handler import InterruptedError, InterruptHandler
 from ..runtime_config import RuntimeConfig
 from .events import (
     MessageOutputEvent,
@@ -38,6 +40,7 @@ class AgentProtocol(Protocol):
     """Protocol defining the interface for agents."""
 
     config: RuntimeConfig
+    interrupt_handler: InterruptHandler
 
     async def __aenter__(self) -> "AgentProtocol": ...
 
@@ -59,6 +62,7 @@ class Agent:
         self._previous_response_id: Optional[str] = None
         self._exit_stack: Optional[AsyncExitStack] = None
         self._sdk_agent: Optional[SDKAgent] = None
+        self.interrupt_handler = InterruptHandler()
 
     async def __aenter__(self) -> "Agent":
         # Initialize exit stack for async contexts and callbacks
@@ -124,11 +128,29 @@ class Agent:
             ToolCallEvent | ReasoningEvent | MessageOutputEvent
         ]:
             """Map SDK events to agent events, filtering out None values."""
-            async for sdk_event in result.stream_events():
-                agent_event = map_sdk_event_to_agent_event(sdk_event)
-                if agent_event is not None:
-                    yield agent_event
+            try:
+                async for sdk_event in result.stream_events():
+                    # Check if we've been interrupted
+                    if self.interrupt_handler.interrupted:
+                        logger.info("Agent run interrupted by user")
+                        # Store the response ID even if interrupted
+                        if hasattr(result, 'last_response_id') and result.last_response_id:
+                            self._previous_response_id = result.last_response_id
+                        raise InterruptedError("Agent run interrupted by user")
+                    
+                    agent_event = map_sdk_event_to_agent_event(sdk_event)
+                    if agent_event is not None:
+                        yield agent_event
+            except asyncio.CancelledError:
+                # Handle cancellation gracefully
+                logger.info("Agent run cancelled")
+                # Try to preserve the response ID if available
+                if hasattr(result, 'last_response_id') and result.last_response_id:
+                    self._previous_response_id = result.last_response_id
+                raise InterruptedError("Agent run cancelled")
+            finally:
+                # Always try to store the last-response ID
+                if hasattr(result, 'last_response_id') and result.last_response_id:
+                    self._previous_response_id = result.last_response_id
 
-        # Store the last-response ID so subsequent calls continue the dialogue
-        self._previous_response_id = result.last_response_id
         return _map_events()

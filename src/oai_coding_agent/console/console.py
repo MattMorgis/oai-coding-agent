@@ -1,5 +1,5 @@
 import asyncio
-from typing import Protocol
+from typing import Any, Protocol
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -11,6 +11,7 @@ from rich.panel import Panel
 from oai_coding_agent.runtime_config import get_data_dir
 
 from ..agent import AgentProtocol
+from ..interrupt_handler import InterruptedError
 from .key_bindings import get_key_bindings
 from .rendering import clear_terminal, console, render_message
 from .slash_commands import handle_slash_command, register_slash_commands
@@ -42,11 +43,17 @@ class HeadlessConsole:
 
         console.print(f"[bold cyan]Prompt:[/bold cyan] {self.agent.config.prompt}")
         async with self.agent:
-            event_stream = await self.agent.run(self.agent.config.prompt)
-            async for event in event_stream:
-                ui_msg = map_event_to_ui_message(event)
-                if ui_msg:
-                    render_message(ui_msg)
+            with self.agent.interrupt_handler:
+                try:
+                    event_stream = await self.agent.run(self.agent.config.prompt)
+                    async for event in event_stream:
+                        ui_msg = map_event_to_ui_message(event)
+                        if ui_msg:
+                            render_message(ui_msg)
+                except InterruptedError:
+                    console.print("\n[yellow]Response interrupted by user.[/yellow]")
+                except KeyboardInterrupt:
+                    console.print("\n[red]Exiting...[/red]")
 
 
 class ReplConsole:
@@ -54,6 +61,12 @@ class ReplConsole:
 
     def __init__(self, agent: AgentProtocol) -> None:
         self.agent = agent
+
+    async def _process_agent_response(self, event_stream: Any) -> None:
+        """Process and render agent response events."""
+        async for event in event_stream:
+            ui_msg = map_event_to_ui_message(event)
+            render_message(ui_msg)
 
     async def run(self) -> None:
         """Interactive REPL loop for the console interface."""
@@ -113,10 +126,42 @@ class ReplConsole:
 
                     console.print(f"[dim]› {user_input}[/dim]\n")
 
-                    event_stream = await self.agent.run(user_input)
-                    async for event in event_stream:
-                        ui_msg = map_event_to_ui_message(event)
-                        render_message(ui_msg)
+                    # Install interrupt handler and run the agent
+                    with self.agent.interrupt_handler:
+                        try:
+                            # Create task for cancellable execution
+                            async with self.agent.interrupt_handler.cancellable_task(
+                                self._process_agent_response(self.agent.run(user_input))
+                            ) as task:
+                                await task
+                        except InterruptedError:
+                            # Handle interruption gracefully
+                            console.print("\n[yellow]Response interrupted by user.[/yellow]")
+                            
+                            # Prompt user for how to proceed
+                            proceed_prompt = await asyncio.to_thread(
+                                lambda: prompt_session.prompt(
+                                    "How would you like to proceed? (continue with new instructions or press Enter to skip): "
+                                )
+                            )
+                            
+                            if proceed_prompt.strip():
+                                # Continue with new instructions
+                                user_input = proceed_prompt
+                                console.print(f"[dim]› {user_input}[/dim]\n")
+                                
+                                # Reset interrupt state and run with new input
+                                self.agent.interrupt_handler.reset()
+                                event_stream = await self.agent.run(user_input)
+                                async for event in event_stream:
+                                    ui_msg = map_event_to_ui_message(event)
+                                    render_message(ui_msg)
+                            else:
+                                console.print("[dim]Skipping interrupted response.[/dim]\n")
+                        except KeyboardInterrupt:
+                            # Second interrupt means exit
+                            console.print("\n[red]Exiting...[/red]")
+                            continue_loop = False
 
                 except (KeyboardInterrupt, EOFError):
                     continue_loop = False
