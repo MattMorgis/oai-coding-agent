@@ -44,7 +44,7 @@ def show_interrupt_indicator() -> None:
     """Show the 'ESC to interrupt' indicator."""
     global _interrupt_live
     if _interrupt_live is None:
-        indicator_text = Text("🔸 Press ESC to interrupt response", style="bold yellow")
+        indicator_text = Text("(esc to interrupt)", style="dim")
         _interrupt_live = Live(indicator_text, console=console, refresh_per_second=1)
         _interrupt_live.start()
 

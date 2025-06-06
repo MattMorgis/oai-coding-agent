@@ -58,7 +58,7 @@ class HeadlessConsole:
                         if ui_msg:
                             render_message(ui_msg)
                 except InterruptedError:
-                    console.print("\n[gray](press esc to interrupt)[/gray]")
+                    console.print("\n[yellow]Response interrupted[/yellow]")
                 except KeyboardInterrupt:
                     console.print("\n[red]Exiting...[/red]")
                 finally:
@@ -73,13 +73,9 @@ class ReplConsole:
 
     async def _process_agent_response(self, event_stream: Any) -> None:
         """Process and render agent response events."""
-        show_interrupt_indicator()
-        try:
-            async for event in event_stream:
-                ui_msg = map_event_to_ui_message(event)
-                render_message(ui_msg)
-        finally:
-            hide_interrupt_indicator()
+        async for event in event_stream:
+            ui_msg = map_event_to_ui_message(event)
+            render_message(ui_msg)
 
     async def run(self) -> None:
         """Interactive REPL loop for the console interface."""
@@ -142,6 +138,8 @@ class ReplConsole:
                     # Install interrupt handler and run the agent
                     with self.agent.interrupt_handler:
                         try:
+                            # Show interrupt indicator during response
+                            show_interrupt_indicator()
                             # Get the event stream first to ensure we have an async iterator
                             event_stream = await self.agent.run(user_input)
                             # Create task for cancellable execution
@@ -151,7 +149,7 @@ class ReplConsole:
                                 await task
                         except InterruptedError:
                             # Handle interruption gracefully - show message above input
-                            console.print("\n[red]Response interrupted[/red]")
+                            console.print("\n[red]interrupted[/red]")
 
                             # Get new input from user immediately
                             new_input = await asyncio.to_thread(
@@ -181,6 +179,9 @@ class ReplConsole:
                             # Ctrl+C means exit
                             console.print("\n[red]Exiting...[/red]")
                             continue_loop = False
+                        finally:
+                            # Always hide the interrupt indicator when done with response
+                            hide_interrupt_indicator()
 
                 except (KeyboardInterrupt, EOFError):
                     continue_loop = False
