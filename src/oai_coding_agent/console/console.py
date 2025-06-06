@@ -129,27 +129,31 @@ class ReplConsole:
                     # Install interrupt handler and run the agent
                     with self.agent.interrupt_handler:
                         try:
+                            # Get the event stream first to ensure we have an async iterator
+                            event_stream = await self.agent.run(user_input)
                             # Create task for cancellable execution
                             async with self.agent.interrupt_handler.cancellable_task(
-                                self._process_agent_response(self.agent.run(user_input))
+                                self._process_agent_response(event_stream)
                             ) as task:
                                 await task
                         except InterruptedError:
                             # Handle interruption gracefully
-                            console.print("\n[yellow]Response interrupted by user.[/yellow]")
-                            
+                            console.print(
+                                "\n[yellow]Response interrupted by user.[/yellow]"
+                            )
+
                             # Prompt user for how to proceed
                             proceed_prompt = await asyncio.to_thread(
                                 lambda: prompt_session.prompt(
                                     "How would you like to proceed? (continue with new instructions or press Enter to skip): "
                                 )
                             )
-                            
+
                             if proceed_prompt.strip():
                                 # Continue with new instructions
                                 user_input = proceed_prompt
                                 console.print(f"[dim]› {user_input}[/dim]\n")
-                                
+
                                 # Reset interrupt state and run with new input
                                 self.agent.interrupt_handler.reset()
                                 event_stream = await self.agent.run(user_input)
@@ -157,7 +161,9 @@ class ReplConsole:
                                     ui_msg = map_event_to_ui_message(event)
                                     render_message(ui_msg)
                             else:
-                                console.print("[dim]Skipping interrupted response.[/dim]\n")
+                                console.print(
+                                    "[dim]Skipping interrupted response.[/dim]\n"
+                                )
                         except KeyboardInterrupt:
                             # Second interrupt means exit
                             console.print("\n[red]Exiting...[/red]")

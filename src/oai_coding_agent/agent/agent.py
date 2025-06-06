@@ -134,10 +134,13 @@ class Agent:
                     if self.interrupt_handler.interrupted:
                         logger.info("Agent run interrupted by user")
                         # Store the response ID even if interrupted
-                        if hasattr(result, 'last_response_id') and result.last_response_id:
+                        if (
+                            hasattr(result, "last_response_id")
+                            and result.last_response_id
+                        ):
                             self._previous_response_id = result.last_response_id
                         raise InterruptedError("Agent run interrupted by user")
-                    
+
                     agent_event = map_sdk_event_to_agent_event(sdk_event)
                     if agent_event is not None:
                         yield agent_event
@@ -145,12 +148,13 @@ class Agent:
                 # Handle cancellation gracefully
                 logger.info("Agent run cancelled")
                 # Try to preserve the response ID if available
-                if hasattr(result, 'last_response_id') and result.last_response_id:
+                if hasattr(result, "last_response_id") and result.last_response_id:
                     self._previous_response_id = result.last_response_id
                 raise InterruptedError("Agent run cancelled")
             finally:
                 # Always try to store the last-response ID
-                if hasattr(result, 'last_response_id') and result.last_response_id:
+                if hasattr(result, "last_response_id") and result.last_response_id:
                     self._previous_response_id = result.last_response_id
 
+        # Call the async generator function to get an async iterator
         return _map_events()
