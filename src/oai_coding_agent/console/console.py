@@ -5,7 +5,6 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.shortcuts import radiolist_dialog
 from prompt_toolkit.styles import Style
 from rich.panel import Panel
 
@@ -24,34 +23,6 @@ from .rendering import (
 from .slash_commands import handle_slash_command, register_slash_commands
 from .state import UIState
 from .ui_event_mapper import map_event_to_ui_message
-
-
-async def show_interrupt_menu() -> str:
-    """Show interrupt menu and return user's choice.
-    
-    Returns:
-        'continue': Continue conversation with context
-        'reset': Start fresh conversation
-    """
-    result = await asyncio.to_thread(
-        lambda: radiolist_dialog(
-            title="🛑 Response Interrupted",
-            text="Choose how to proceed:",
-            values=[
-                ("continue", "Continue conversation - Keep chat history and add new instructions"),
-                ("reset", "Reset conversation - Clear all history and start completely fresh"),
-            ],
-            default="continue",
-            style=Style.from_dict({
-                'dialog': 'bg:#4444aa',
-                'button': 'bg:#000044',
-                'checkbox': '#ffff00',
-                'radio-checked': 'bg:#ffff00 #000000',
-                'radio': '#ffff00',
-            })
-        ).run()
-    )
-    return result or "continue"
 
 
 class Console(Protocol):
@@ -87,9 +58,7 @@ class HeadlessConsole:
                         if ui_msg:
                             render_message(ui_msg)
                 except InterruptedError:
-                    console.print(
-                        "\n[yellow]Response interrupted (ESC pressed)[/yellow]"
-                    )
+                    console.print("\n[gray](press esc to interrupt)[/gray]")
                 except KeyboardInterrupt:
                     console.print("\n[red]Exiting...[/red]")
                 finally:
@@ -181,32 +150,20 @@ class ReplConsole:
                             ) as task:
                                 await task
                         except InterruptedError:
-                            # Handle interruption gracefully
-                            console.print(
-                                "\n[yellow]Response interrupted (ESC pressed)[/yellow]\n"
+                            # Handle interruption gracefully - show message above input
+                            console.print("\n[red]Response interrupted[/red]")
+
+                            # Get new input from user immediately
+                            new_input = await asyncio.to_thread(
+                                lambda: prompt_session.prompt("› ")
                             )
 
-                            # Show interrupt menu
-                            choice = await show_interrupt_menu()
-                            
-                            if choice == "reset":
-                                # Clear conversation history
-                                if hasattr(self.agent, '_previous_response_id'):
-                                    self.agent._previous_response_id = None
-                                console.print("[dim]Conversation reset. Starting fresh.[/dim]\n")
-                            
-                            # Get new input from user
-                            new_input = await asyncio.to_thread(
-                                lambda: prompt_session.prompt(
-                                    f"[{'Continue' if choice == 'continue' else 'New'}] › "
-                                )
-                            )
-                            
                             if new_input.strip():
                                 user_input = new_input
                                 console.print(f"[dim]› {user_input}[/dim]\n")
 
                                 # Reset interrupt state and run with new input
+                                # Always preserve conversation context
                                 self.agent.interrupt_handler.reset()
                                 show_interrupt_indicator()
                                 try:
