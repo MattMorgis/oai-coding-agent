@@ -1,39 +1,89 @@
 import asyncio
 import contextlib
-import signal
+import select
+import sys
+import termios
+import threading
+import tty
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Set, TypeVar
-import types
+from typing import Any, Optional, Set, TypeVar
 
 T = TypeVar('T')
 
 
 @dataclass
 class InterruptHandler:
-    """Manages interrupt handling for graceful cancellation of running tasks."""
+    """Manages interrupt handling for graceful cancellation of running tasks using ESC key."""
     
     _interrupted: bool = field(default=False, init=False)
     _active_tasks: Set[asyncio.Task[Any]] = field(default_factory=set, init=False)
-    _original_handler: Optional[Callable[[int, Optional[types.FrameType]], Any]] = field(default=None, init=False)
     _event: Optional[asyncio.Event] = field(default=None, init=False)
+    _key_monitor_task: Optional[asyncio.Task[Any]] = field(default=None, init=False)
     
     def __post_init__(self) -> None:
         self._event = asyncio.Event()
     
-    def install(self) -> None:
-        """Install the interrupt handler."""
-        handler = signal.signal(signal.SIGINT, self._handle_interrupt)
-        if callable(handler):
-            self._original_handler = handler
+    def start_monitoring(self) -> None:
+        """Start monitoring for ESC key press."""
+        try:
+            if self._key_monitor_task is None or self._key_monitor_task.done():
+                self._key_monitor_task = asyncio.create_task(self._monitor_esc_key())
+        except RuntimeError:
+            # No event loop running, skip monitoring
+            pass
     
-    def uninstall(self) -> None:
-        """Restore the original signal handler."""
-        if self._original_handler is not None:
-            signal.signal(signal.SIGINT, self._original_handler)
-            self._original_handler = None
+    def stop_monitoring(self) -> None:
+        """Stop monitoring for ESC key press."""
+        if self._key_monitor_task and not self._key_monitor_task.done():
+            self._key_monitor_task.cancel()
+            self._key_monitor_task = None
     
-    def _handle_interrupt(self, signum: int, frame: Optional[types.FrameType]) -> None:
-        """Handle SIGINT signal."""
+    async def _monitor_esc_key(self) -> None:
+        """Monitor for ESC key press in a separate thread."""
+        try:
+            # Only work on Unix-like systems with a TTY
+            if not sys.stdin.isatty():
+                return
+            
+            old_settings = termios.tcgetattr(sys.stdin)
+            
+            def read_key() -> Optional[str]:
+                """Read a single key press."""
+                try:
+                    tty.setraw(sys.stdin.fileno())
+                    if select.select([sys.stdin], [], [], 0.1)[0]:
+                        key = sys.stdin.read(1)
+                        if key == '\x1b':  # ESC key
+                            return 'ESC'
+                    return None
+                finally:
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            
+            # Run key monitoring in executor to avoid blocking
+            while not self._interrupted:
+                try:
+                    key = await asyncio.get_event_loop().run_in_executor(
+                        None, read_key
+                    )
+                    if key == 'ESC':
+                        self._handle_interrupt()
+                        break
+                    await asyncio.sleep(0.1)
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    # Fallback if terminal handling fails
+                    await asyncio.sleep(0.1)
+                    
+        except ImportError:
+            # Fallback for systems without termios/tty
+            pass
+        except Exception:
+            # Silent fail for any other issues
+            pass
+    
+    def _handle_interrupt(self) -> None:
+        """Handle interrupt (ESC key press)."""
         self._interrupted = True
         if self._event:
             self._event.set()
@@ -81,12 +131,12 @@ class InterruptHandler:
     
     def __enter__(self) -> "InterruptHandler":
         """Context manager entry."""
-        self.install()
+        self.start_monitoring()
         return self
     
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit."""
-        self.uninstall()
+        self.stop_monitoring()
         pass
 
 

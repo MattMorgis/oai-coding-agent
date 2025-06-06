@@ -1,7 +1,10 @@
 import os
+from typing import Optional
 
 from rich.console import Console, ConsoleOptions, RenderResult
+from rich.live import Live
 from rich.markdown import Heading, Markdown
+from rich.text import Text
 
 from .state import UIMessage
 
@@ -28,10 +31,30 @@ Markdown.elements["heading_open"] = PlainHeading
 
 console = Console()
 
+# Global variable to track interrupt indicator
+_interrupt_live: Optional[Live] = None
+
 
 def clear_terminal() -> None:
     """Clear the terminal screen."""
     os.system("cls" if os.name == "nt" else "clear")
+
+
+def show_interrupt_indicator() -> None:
+    """Show the 'ESC to interrupt' indicator."""
+    global _interrupt_live
+    if _interrupt_live is None:
+        indicator_text = Text("Press ESC to interrupt...", style="dim yellow")
+        _interrupt_live = Live(indicator_text, console=console, refresh_per_second=1)
+        _interrupt_live.start()
+
+
+def hide_interrupt_indicator() -> None:
+    """Hide the 'ESC to interrupt' indicator."""
+    global _interrupt_live
+    if _interrupt_live is not None:
+        _interrupt_live.stop()
+        _interrupt_live = None
 
 
 def render_message(msg: UIMessage) -> None:

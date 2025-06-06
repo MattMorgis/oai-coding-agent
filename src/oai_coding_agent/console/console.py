@@ -13,7 +13,13 @@ from oai_coding_agent.runtime_config import get_data_dir
 from ..agent import AgentProtocol
 from ..interrupt_handler import InterruptedError
 from .key_bindings import get_key_bindings
-from .rendering import clear_terminal, console, render_message
+from .rendering import (
+    clear_terminal,
+    console,
+    hide_interrupt_indicator,
+    render_message,
+    show_interrupt_indicator,
+)
 from .slash_commands import handle_slash_command, register_slash_commands
 from .state import UIState
 from .ui_event_mapper import map_event_to_ui_message
@@ -45,15 +51,20 @@ class HeadlessConsole:
         async with self.agent:
             with self.agent.interrupt_handler:
                 try:
+                    show_interrupt_indicator()
                     event_stream = await self.agent.run(self.agent.config.prompt)
                     async for event in event_stream:
                         ui_msg = map_event_to_ui_message(event)
                         if ui_msg:
                             render_message(ui_msg)
                 except InterruptedError:
-                    console.print("\n[yellow]Response interrupted by user.[/yellow]")
+                    console.print(
+                        "\n[yellow]Response interrupted by user (ESC pressed).[/yellow]"
+                    )
                 except KeyboardInterrupt:
                     console.print("\n[red]Exiting...[/red]")
+                finally:
+                    hide_interrupt_indicator()
 
 
 class ReplConsole:
@@ -64,9 +75,13 @@ class ReplConsole:
 
     async def _process_agent_response(self, event_stream: Any) -> None:
         """Process and render agent response events."""
-        async for event in event_stream:
-            ui_msg = map_event_to_ui_message(event)
-            render_message(ui_msg)
+        show_interrupt_indicator()
+        try:
+            async for event in event_stream:
+                ui_msg = map_event_to_ui_message(event)
+                render_message(ui_msg)
+        finally:
+            hide_interrupt_indicator()
 
     async def run(self) -> None:
         """Interactive REPL loop for the console interface."""
@@ -139,7 +154,7 @@ class ReplConsole:
                         except InterruptedError:
                             # Handle interruption gracefully
                             console.print(
-                                "\n[yellow]Response interrupted by user.[/yellow]"
+                                "\n[yellow]Response interrupted by user (ESC pressed).[/yellow]"
                             )
 
                             # Prompt user for how to proceed
@@ -156,16 +171,20 @@ class ReplConsole:
 
                                 # Reset interrupt state and run with new input
                                 self.agent.interrupt_handler.reset()
-                                event_stream = await self.agent.run(user_input)
-                                async for event in event_stream:
-                                    ui_msg = map_event_to_ui_message(event)
-                                    render_message(ui_msg)
+                                show_interrupt_indicator()
+                                try:
+                                    event_stream = await self.agent.run(user_input)
+                                    async for event in event_stream:
+                                        ui_msg = map_event_to_ui_message(event)
+                                        render_message(ui_msg)
+                                finally:
+                                    hide_interrupt_indicator()
                             else:
                                 console.print(
                                     "[dim]Skipping interrupted response.[/dim]\n"
                                 )
                         except KeyboardInterrupt:
-                            # Second interrupt means exit
+                            # Ctrl+C means exit
                             console.print("\n[red]Exiting...[/red]")
                             continue_loop = False
 
