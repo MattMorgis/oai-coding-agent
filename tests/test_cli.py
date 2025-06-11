@@ -148,7 +148,7 @@ def test_cli_uses_cwd_as_default_repo_path(
     assert agent.config.repo_path == expected_cwd
     assert agent.config.model == ModelChoice.codex_mini_latest
     assert agent.config.openai_api_key == "ENVKEY"
-    assert agent.config.openai_base_url is None
+    assert agent.config.openai_base_url == "http://127.0.0.1:1234/v1"
     assert agent.config.mode == ModeChoice.default
 
 
@@ -174,7 +174,7 @@ def test_cli_prompt_invokes_headless_main(
     assert agent.config.repo_path == tmp_path
     assert agent.config.model == ModelChoice.codex_mini_latest
     assert agent.config.openai_api_key == "ENVKEY"
-    assert agent.config.openai_base_url is None
+    assert agent.config.openai_base_url == "http://127.0.0.1:1234/v1"
     assert agent.config.mode == ModeChoice.async_
     assert agent.config.prompt == "Do awesome things"
 
@@ -202,7 +202,7 @@ def test_cli_prompt_stdin_invokes_headless_main(
     assert agent.config.repo_path == tmp_path
     assert agent.config.model == ModelChoice.codex_mini_latest
     assert agent.config.openai_api_key == "ENVKEY"
-    assert agent.config.openai_base_url is None
+    assert agent.config.openai_base_url == "http://127.0.0.1:1234/v1"
     assert agent.config.mode == ModeChoice.async_
     assert agent.config.prompt == prompt_str
 

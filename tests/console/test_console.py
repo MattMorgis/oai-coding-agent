@@ -14,7 +14,6 @@ from oai_coding_agent.runtime_config import (
     ModeChoice,
     ModelChoice,
     RuntimeConfig,
-    get_data_dir,
 )
 
 
@@ -39,9 +38,6 @@ def setup_repl(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Console:
     # Force history path into tmp_path
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    # Monkeypatch prompt session only
-    monkeypatch.setattr(console_module, "PromptSession", DummyPromptSession)
-
     return recorder
 
 
@@ -56,18 +52,14 @@ async def test_repl_console_exits_on_exit_and_prints_header(
         model=ModelChoice.codex_mini_latest,
         repo_path=tmp_path,
         mode=ModeChoice.default,
+        prompt="Test prompt",
     )
 
     # Create agent and console directly
     agent = MockAgent(config)
-    console = console_module.ReplConsole(agent)
+    console = console_module.HeadlessConsole(agent)
     await console.run()
 
     output = recorder.export_text()
-    # Header includes agent name and model
-    assert "OAI CODING AGENT" in output
-    assert "codex-mini-latest" in output
-
-    # Ensure history directory was created under tmp_path
-    history_dir = get_data_dir()
-    assert history_dir.is_dir(), "History directory should be created"
+    # HeadlessConsole prints the prompt, not a header
+    assert "Prompt: Test prompt" in output

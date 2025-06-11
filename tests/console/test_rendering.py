@@ -2,7 +2,7 @@ import pytest
 from rich.console import Console
 
 import oai_coding_agent.console.rendering as rendering
-from oai_coding_agent.console.state import UIMessage
+from oai_coding_agent.console.rendering import UIMessage
 
 
 @pytest.fixture(autouse=True)

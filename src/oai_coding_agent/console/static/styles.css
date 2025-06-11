@@ -1,0 +1,64 @@
+Screen {
+  align: center middle;
+}
+
+#chat-container {
+  width: 100%;
+  height: 90%;
+  padding: 0;
+  layout: grid;
+  grid-size: 1;
+  grid-rows: 1fr auto;
+}
+
+#message-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  border-bottom: solid $primary-darken-2;
+}
+
+#live-container {
+  width: 100%;
+  height: auto;
+  align: center bottom;
+  padding: 0 1;
+}
+
+#input-container {
+  width: 100%;
+  height: auto;
+  align: center bottom;
+}
+
+Input {
+  width: 100%;
+  margin: 1 0 0 0;
+  border: tall $primary;
+  height: 3;
+}
+
+PromptWidget {
+  width: 100%;
+  margin: 1 0 0 0;
+  border: tall $primary;
+  height: 3;
+}
+
+ChatMessage {
+  width: 100%;
+  padding: 1;
+  height: auto;
+}
+
+LiveMessage {
+  width: 100%;
+  padding: 1 2;
+  background: $surface;
+  text-style: italic;
+  height: auto;
+}
+
+.hidden {
+  display: none;
+}

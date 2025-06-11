@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run OAI Coding Agent CLI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "oai_coding_agent.cli",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "args": ["--model=o4-mini"]
+    }
+  ]
+}

@@ -9,7 +9,8 @@ import typer
 from oai_coding_agent.agent import Agent, AgentProtocol
 from oai_coding_agent.auth.github_browser_auth import authenticate_github_browser
 from oai_coding_agent.auth.token_storage import delete_github_token, get_github_token
-from oai_coding_agent.console.console import Console, HeadlessConsole, ReplConsole
+from oai_coding_agent.console.console import Console, HeadlessConsole
+from oai_coding_agent.console.ui import ChatInterface
 from oai_coding_agent.logger import setup_logging
 from oai_coding_agent.preflight import PreflightCheckError, run_preflight_checks
 from oai_coding_agent.runtime_config import (
@@ -24,7 +25,7 @@ from oai_coding_agent.runtime_config import (
 
 # Global factory functions - set by create_app()
 _agent_factory: Optional[Callable[[RuntimeConfig], AgentProtocol]] = None
-_console_factory: Optional[Callable[[AgentProtocol], Console]] = None
+_console_factory: Optional[Callable[[AgentProtocol], Console | ChatInterface]] = None
 
 
 def default_agent_factory(config: RuntimeConfig) -> AgentProtocol:
@@ -32,12 +33,12 @@ def default_agent_factory(config: RuntimeConfig) -> AgentProtocol:
     return Agent(config)
 
 
-def default_console_factory(agent: AgentProtocol) -> Console:
+def default_console_factory(agent: AgentProtocol) -> Console | ChatInterface:
     """Default factory for creating Console instances."""
     if agent.config.prompt:
         return HeadlessConsole(agent)
     else:
-        return ReplConsole(agent)
+        return ChatInterface(agent)
 
 
 def create_github_app() -> typer.Typer:
@@ -206,14 +207,19 @@ def main(
             console_fact = _console_factory or default_console_factory
             agent = factory(cfg)
             console = console_fact(agent)
-            asyncio.run(console.run())
+            if isinstance(console, HeadlessConsole):
+                asyncio.run(console.run())
+            elif isinstance(console, ChatInterface):
+                console.run()
         except KeyboardInterrupt:
             print("\nExiting...")
 
 
 def create_app(
     agent_factory: Optional[Callable[[RuntimeConfig], AgentProtocol]] = None,
-    console_factory: Optional[Callable[[AgentProtocol], Console]] = None,
+    console_factory: Optional[
+        Callable[[AgentProtocol], Console | ChatInterface]
+    ] = None,
 ) -> typer.Typer:
     """
     Create and configure the Typer application.

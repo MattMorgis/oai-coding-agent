@@ -48,8 +48,17 @@ class MessageOutputEvent:
     text: str
 
 
+@dataclass
+class UsageUpdateEvent:
+    """An event containing token usage information."""
+
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
+
 # Union type for all agent events
-AgentEvent = Union[ToolCallEvent, ReasoningEvent, MessageOutputEvent]
+AgentEvent = Union[ToolCallEvent, ReasoningEvent, MessageOutputEvent, UsageUpdateEvent]
 
 
 def _extract_tool_call_info(raw_item: ToolCallItemTypes) -> Optional[ToolCallEvent]:

@@ -24,6 +24,7 @@ from oai_coding_agent.agent.events import (
     MessageOutputEvent,
     ReasoningEvent,
     ToolCallEvent,
+    UsageUpdateEvent,
     map_sdk_event_to_agent_event,
 )
 from oai_coding_agent.agent.instruction_builder import build_instructions
@@ -49,7 +50,9 @@ class AgentProtocol(Protocol):
         self,
         user_input: str,
     ) -> tuple[
-        AsyncIterator[ToolCallEvent | ReasoningEvent | MessageOutputEvent],
+        AsyncIterator[
+            ToolCallEvent | ReasoningEvent | MessageOutputEvent | UsageUpdateEvent
+        ],
         RunResultStreaming,
     ]: ...
 
@@ -108,7 +111,9 @@ class Agent:
         self,
         user_input: str,
     ) -> tuple[
-        AsyncIterator[ToolCallEvent | ReasoningEvent | MessageOutputEvent],
+        AsyncIterator[
+            ToolCallEvent | ReasoningEvent | MessageOutputEvent | UsageUpdateEvent
+        ],
         RunResultStreaming,
     ]:
         """
@@ -125,9 +130,10 @@ class Agent:
         )
 
         async def _map_events() -> AsyncIterator[
-            ToolCallEvent | ReasoningEvent | MessageOutputEvent
+            ToolCallEvent | ReasoningEvent | MessageOutputEvent | UsageUpdateEvent
         ]:
             """Map SDK events to agent events, filtering out None values."""
+            last_usage_check = 0
             async for sdk_event in result.stream_events():
                 # Store the last-response ID so subsequent calls continue the dialogue
                 self._previous_response_id = result.last_response_id
@@ -135,14 +141,26 @@ class Agent:
                 if agent_event is not None:
                     yield agent_event
 
+                # Periodically check for usage updates from raw_responses
+                last_usage_check += 1
+                if last_usage_check >= 10:  # Check every 10 events
+                    last_usage_check = 0
+                    if hasattr(result, "raw_responses") and result.raw_responses:
+                        total_input = 0
+                        total_output = 0
+                        for response in result.raw_responses:
+                            if hasattr(response, "usage") and response.usage:
+                                total_input += response.usage.input_tokens
+                                total_output += response.usage.output_tokens
+                        if total_input > 0 or total_output > 0:
+                            yield UsageUpdateEvent(
+                                input_tokens=total_input,
+                                output_tokens=total_output,
+                                total_tokens=total_input + total_output,
+                            )
+
         return _map_events(), result
 
     async def cancel(self, run: RunResultStreaming) -> None:
-        """Abort an in-flight run and restore the last completed response ID.
-
-        The SDK's ``RunResultStreaming.cancel`` closes the HTTP stream but does
-        *not* roll back this ``Agent``'s conversation pointer.  We therefore
-        capture the snapshot *before* each run starts (see ``run`` below) and
-        restore it here if the caller decides to abort the run.
-        """
+        """Abort an in-flight run and restore the last completed response ID."""
         run.cancel()

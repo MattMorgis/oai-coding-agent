@@ -1,9 +1,13 @@
 import os
+from typing import TypedDict
 
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.markdown import Heading, Markdown
 
-from oai_coding_agent.console.state import UIMessage
+
+class UIMessage(TypedDict):
+    role: str
+    content: str
 
 
 # Classes to override the default Markdown renderer
