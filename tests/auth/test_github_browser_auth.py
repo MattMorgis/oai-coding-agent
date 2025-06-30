@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 import pytest
 import requests
 
-import oai_coding_agent.github.github_browser_auth as gba
+import oai_coding_agent.auth.github_browser_auth as gba
 
 
 class DummyResponse:

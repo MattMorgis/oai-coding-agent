@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
+from oai_coding_agent.auth.github_browser_auth import DeviceFlowData
 from oai_coding_agent.console.github_console import GitHubConsole
-from oai_coding_agent.github.github_browser_auth import DeviceFlowData
 
 
 @pytest.fixture
